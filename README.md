@@ -49,18 +49,15 @@ encontrarse.
       para el usuario de base de datos de *Backdrop*.
 2. Instala el sistema base *Backdrop*, ejecutando el *playbook* `backdrop.yml`:
 
-       ```
-	   ansible-playbook --ask-become-pass -i hosts backdrop.yml
-	   ```
+   `ansible-playbook --ask-become-pass -i hosts backdrop.yml`
 
    *Ansible* te pedirá la contraseña que requiere el *usuario estándar* en el
    servidor `backdrop` para hacer un `sudo` a root.
 3. Migra la información de tu instalación *Drupal 7* al servidor nuevo
    *Backdrop* utilizando el *playbook* `d7_a_backdrop.yml`:
 
-       ```
-	   ansible-playbook --ask-become-pass -i hosts d7_a_backdrop.yml
-	   ```
+    `ansible-playbook --ask-become-pass -i hosts d7_a_backdrop.yml`
 
-4. ¿Algo no salió bien? Por favor coméntamelo como un *issue* en este proyecto,
-   intentaré resolverlo y ayudarte 😃
+4. ¿Algo no salió bien? Por favor coméntamelo [como un *issue* en este
+   proyecto](https://github.com/gwolf/d2b_migrate/issues), intentaré resolverlo
+   y ayudarte 😃
