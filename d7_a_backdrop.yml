@@ -1,0 +1,296 @@
+- hosts: mysql
+  become: false
+  vars_files: d7_migrate_vars.yml
+
+  tasks:
+
+  - name: Vacía la base de datos destino
+    community.mysql.mysql_db:
+      name: "{{ backdrop_db }}"
+      state: absent
+      login_unix_socket: /run/mysqld/mysqld.sock
+      login_user: "{{ mysql_adm_user }}"
+      login_password: "{{ lookup('password', 'mysql_adm_passwd') }}"
+
+  - name: Crea la base de datos destino
+    community.mysql.mysql_db:
+      name: "{{ backdrop_db }}"
+      state: present
+      login_unix_socket: /run/mysqld/mysqld.sock
+      login_user: "{{ mysql_adm_user }}"
+      login_password: "{{ lookup('password', 'mysql_adm_passwd') }}"
+
+  - name: Crea el usuario en MySQL para Backdrop para esta sesión (conexión local)
+    community.mysql.mysql_user:
+      name: "{{ backdrop_db_user }}"
+      password: "{{ lookup('password', 'mysql_usr_pass') }}"
+      priv: '{{ backdrop_db }}.*:ALL'
+      login_unix_socket: /run/mysqld/mysqld.sock
+      login_user: "{{ mysql_adm_user }}"
+      login_password: "{{ lookup('password', 'mysql_adm_passwd') }}"
+      host: 127.0.0.1
+      state: present
+
+  - name: Crea el usuario en MySQL para Backdrop para conexión Web
+    community.mysql.mysql_user:
+      name: "{{ backdrop_db_user }}"
+      password: "{{ lookup('password', 'mysql_usr_pass') }}"
+      priv: '{{ backdrop_db }}.*:ALL'
+      login_unix_socket: /run/mysqld/mysqld.sock
+      login_user: "{{ mysql_adm_user }}"
+      login_password: "{{ lookup('password', 'mysql_adm_passwd') }}"
+      host: "{{ backdrop_ip }}"
+      state: present
+
+  - name: Genera un archivo para el respaldo temporal de la BD
+    ansible.builtin.tempfile:
+      prefix: d7_to_bd_
+      state: file
+    register: dumpfile
+
+  - name: Exporta un respaldo de la BD de Drupal
+    community.mysql.mysql_db:
+      name: "{{ d7_database }}"
+      login_user: "{{ mysql_adm_user }}"
+      login_password: "{{ lookup('password', 'mysql_adm_passwd') }}"
+      state: dump
+      target: "{{ dumpfile.path }}"
+
+  - name: Corrige el tipo de ligas a archivos, presentando a todos como archivos públicos
+    # Esto corrige un error que he visto varias veces en sistemas Drupal 7 :-\
+    shell: |
+      perl -p -i -e 's!private://!public://!g' "{{ dumpfile.path }}"
+
+  - name: Copia el respaldo de la BD de Drupal al sistema de control
+    ansible.builtin.fetch:
+      src: "{{ dumpfile.path }}"
+      dest: "/tmp/d7_backup_{{ d7_database }}.sql"
+      flat: true
+
+  - name: Elimina el archivo de respaldo temporal
+    ansible.builtin.file:
+      path: "{{ dumpfile.path }}"
+      state: absent
+    when: dumpfile.path is defined
+
+- hosts: d7
+  become: false
+  vars_files: d7_migrate_vars.yml
+
+  tasks:
+    - name: Verifica si ya existe el tar.gz con los contenidos del directorio de archivos
+      # Verifica también si no es demasiado chico (lo cual indicaría que puede
+      # estar corrupto)
+      shell: find "/tmp/d7-{{ d7_database }}-files.tar.gz" -size +1M || true
+      register: archive_exists
+
+    - name: Genera un tar.gz con los contenidos del directorio de archivos
+      community.general.archive:
+        path: "{{ d7_files_dir }}"
+        dest: "/tmp/d7-{{ d7_database }}-files.tar.gz"
+      when: archive_exists.stdout == ""
+
+    - name: Copia el directorio de archivos del servidor D7 al equipo de control
+      ansible.builtin.fetch:
+        src: "/tmp/d7-{{ d7_database }}-files.tar.gz"
+        dest: "/tmp/d7-{{ d7_database }}-files.tar.gz"
+        flat: true
+
+- hosts: backdrop
+  become: true
+  vars_files: d7_migrate_vars.yml
+
+  tasks:
+    - name: Crea el directorio de instalación de Backdrop
+      ansible.builtin.file:
+        path: "{{ backdrop_install_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Instala una copia de Backdrop en este directorio
+      shell:
+        chdir: "{{ backdrop_install_dir }}"
+        cmd: bee dl-core
+        creates: "{{ backdrop_install_dir }}/index.php"
+
+    - name: Crea el directorio de archivos públicos del sitio
+      ansible.builtin.file:
+        path: "{{ backdrop_data_dir }}/files"
+        mode: '0755'
+        group: www-data
+        owner: www-data
+        state: directory
+
+    - name: Vacía el directorio de configuración, en  caso de existir
+      shell: |
+        rm -rf "{{ backdrop_data_dir }}/files/config_*/active/*"
+
+    - name: Crea el directorio de archivos privados del sitio
+      ansible.builtin.file:
+        path: "{{ backdrop_data_dir }}/priv_files"
+        mode: '0755'
+        group: www-data
+        owner: www-data
+        state: directory
+
+    - name: Crea el directorio de módulos
+      ansible.builtin.file:
+        path: "{{ backdrop_data_dir }}/modules"
+        mode: '0755'
+        group: www-data
+        owner: www-data
+        state: directory
+
+    - name: Elimina el directorio de archivos públicos del sitio de dentro del webroot
+      ansible.builtin.file:
+        path: "{{ backdrop_install_dir }}/files"
+        state: absent
+
+    - name: Elimina el directorio de módulos de dentro del webroot
+      ansible.builtin.file:
+        path: "{{ backdrop_install_dir }}/modules"
+        state: absent
+
+    - name: Crea una liga desde el webroot al directorio de archivos públicos del sitio
+      ansible.builtin.file:
+        src: "{{ backdrop_data_dir }}/files"
+        dest: "{{ backdrop_install_dir }}/files"
+        state: link
+
+    - name: Crea una liga desde el webroot al directorio de módulos
+      ansible.builtin.file:
+        src: "{{ backdrop_data_dir }}/modules"
+        dest: "{{ backdrop_install_dir }}/modules"
+        state: link
+
+    - name: Instala configuración local de Backdrop
+      template: >-
+        src=templates/backdrop_settings.local.php
+        dest="{{ backdrop_data_dir }}/settings.local.php"
+
+    - name: Crea una liga desde el webroot a la configuración local
+      ansible.builtin.file:
+        src: "{{ backdrop_data_dir }}/settings.local.php"
+        dest: "{{ backdrop_install_dir }}/settings.local.php"
+        state: link
+
+    - name: Infiere la versión de Backdrop que se instaló (a x.yy, no x.yy.zz)
+      shell: |
+        perl -n -e 'next unless /^version\s*=\s*([\d\.]+)$/; print $1=~/^(\d\.\d+)/' "{{ backdrop_install_dir }}/core/modules/node/node.info"
+      register: backdrop_ver
+
+    - name: Obtiene e instala la traducción al español
+      shell: |
+        mkdir -p {{ backdrop_install_dir }}/files/translations
+        VER={{ backdrop_ver.stdout }}
+        wget -q https://localize.backdropcms.org/files/l10n_packager/all/backdropcms/backdropcms-$VER.es.po -O {{ backdrop_install_dir }}/files/translations/backdropcms-$VER.es.po
+
+    - name: Descomprime el respaldo del directorio de archivos
+      ansible.builtin.unarchive:
+        dest: "{{ backdrop_install_dir }}/files"
+        src: "/tmp/d7-{{ d7_database }}-files.tar.gz"
+
+    - name: Configuración de nginx para el sitio Backdrop
+      template: >
+        src=templates/nginx_sites-available_default.j2
+        dest="/etc/nginx/sites-available/{{ backdrop_hostname }}"
+
+    - name: Activa la configuración de nginx
+      ansible.builtin.file:
+        src: "/etc/nginx/sites-available/{{ backdrop_hostname }}"
+        dest: "/etc/nginx/sites-enabled/{{ backdrop_hostname }}"
+        state: link
+
+    - name: Reinicia nginx para activar la configuración
+      ansible.builtin.systemd_service:
+        state: restarted
+        name: nginx
+
+    # PENDIENTE: ¿Incluir configuración de Certbot? Si no, por lo menos apuntar
+    # a la necesidad de que se haga...
+
+    - name: Configura el URL para ser atendido por backdrop
+      ansible.builtin.lineinfile:
+        state: present
+        path: "{{ backdrop_install_dir }}/settings.local.php"
+        line: "$settings['trusted_host_patterns'] = array('^{{ backdrop_hostname }}$');"
+
+    - name: Inicializa el sistema Backdrop
+      shell: |
+        cd {{ backdrop_install_dir }}
+        php ./core/scripts/install.sh --url {{ backdrop_hostname }} --account-mail {{ backdrop_admin_mail }} --account-name {{ backdrop_admin_user }} --db-url="mysql://{{ backdrop_db_user }}:{{ mysql_usr_pass }}@{{ backdrop_db_host }}/{{ backdrop_db }}" --langcode=es --site-name '{{ backdrop_site_name }}'
+
+    - name: Instala y activa el módulo de migración
+      shell: |
+        bee "--root={{ backdrop_install_dir }}" pm-download d2b_migrate
+        bee "--root={{ backdrop_install_dir }}" pm-enable d2b_migrate
+
+    - name: Configura el directorio para archivos privados del sitio
+      shell: |
+        bee "--root={{ backdrop_install_dir }}" config-set system.core file_private_path  "{{ backdrop_data_dir }}/priv_files"
+
+    - name: Reestablece todos los permisos dentro del directorio de archivos
+      shell: |
+        chown -R www-data:www-data  {{ backdrop_data_dir }}/files
+        find {{ backdrop_data_dir }}/files -type f -exec chmod 0644 \{\} +
+        find {{ backdrop_data_dir }}/files -type d -exec chmod 0755 \{\} +
+
+    - name: Elimina una tabla innecesria que mete ruido para la migración
+      shell: bee --root="{{ backdrop_install_dir }}" --base-url="http://{{ backdrop_hostname }}"  dbq 'drop table language'
+
+    - name: Obtiene la liga para identificarse ante Backdrop como usuario autenticado
+      shell: |
+        bee "--root={{ backdrop_install_dir }}" user-login --base-url="http://{{ backdrop_hostname }}" | grep -v 'Use the following link'
+      register: login_url
+
+    - name: Habilita el módulo del editor gráfico CKEditor 5
+      shell: |
+        bee "--root={{ backdrop_install_dir }}" pm-enable ckeditor5
+        bee "--root={{ backdrop_install_dir }}" config-set filter.format.filtered_html editor ckeditor5
+
+##########
+## PENDIENTE!
+##
+## Aquí falla porque la variable "login_url" no es transmitida de las
+## declaraciones anteriores a las siguientes... ¡Encontrar cómo!
+- hosts: 127.0.0.1
+  connection: local
+  vars_files: d7_migrate_vars.yml
+  tasks:
+    - name: Importa los datos y configuración de Drupal 7 a Backdrop
+      shell: ./files/run_d2b.pl --bksql "/tmp/d7_backup_{{ d7_database }}.sql" --login "{{ login_url.stdout }}"
+
+- hosts: backdrop
+  become: true
+  vars_files: d7_migrate_vars.yml
+  tasks:
+    - name: Actualiza las estructuras de la BD
+      shell: |
+        # La primera vez falla. Ignorar y reintentar, la segunda termina bien.
+        bee --root="{{ backdrop_install_dir }}" -y updb
+        bee --root="{{ backdrop_install_dir }}" -y updb
+
+    - name: Corrige ligas con URLs absolutos en los menúes
+      shell: |
+        MENULINKS=`mktemp`
+        bee --root="{{ backdrop_install_dir }}" dbq "SELECT mlid,plid,link_path FROM menu_links WHERE link_path RLIKE '^http.+{{ d7_hostname }}'" > $MENULINKS
+        perl -n -e '($mlid,$plid,$orig) = split(","); $quote=chr(39); $orig =~ /^.+{{ d7_hostname }}\/(.+)/; $new=$1; system("bee", "--root={{ backdrop_install_dir }}", "dbq", qq(UPDATE menu_links SET link_path=$quote$new$quote WHERE mlid=$mlid AND plid=$plid;\n))' < $MENULINKS
+        rm -f $MENULINKS
+
+    - name: Después de la migración, reestablece los directorios de archivos de Backdrop a directorios exsistentes
+      shell: |
+        INST="{{ backdrop_install_dir }}"
+        DATA="{{ backdrop_data_dir }}"
+        bee --root=${INST} config-set system.core file_private_path ${DATA}/priv_files
+        bee --root=${INST} config-set system.core file_public_path files
+        bee --root=${INST} config-set system.core file_temporary_path /tmp
+
+    - name: Selecciona al layout «boxton», más sencillo, como layout default del contenido
+      shell: |
+        bee --root=${INST} config-set layout.layout.default layout_template boxton
+        echo 0 | bee --root=${INST} -y cache-clear
+
+    - name: Establece la configuración del tema "basis"
+      ansible.builtin.copy:
+        src: files/basis.settings.json
+        dest: "{{ backdrop_data_dir }}/files/config_a1614e81308b9e6b86be181ef0914335/active/basis.settings.json"

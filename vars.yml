@@ -1,0 +1,12 @@
+backdrop_db_host: # Servidor MySQL donde se instalará la BD MySQL
+backdrop_db: # Nombre de la BD destino de Backdrop
+backdrop_db_user: # Usuario de Backdrop en la base de datos MySQL
+mysql_adm_user: root # Usuario administrativo para crear la BD de Backdrop
+
+backdrop_ip: # IP del servidor que hospedará el sistema Backdrop
+backdrop_hostname: # Nombre (DNS) del sistema Backdrop a instalar
+
+backdrop_install_dir: /var/www/backdrop # Directorio donde se instalará el sistema Backdrop
+backdrop_src_dir: /var/www/src # Directorio donde se descarga el archivo fuente de Backdrop
+bee_directory: /opt/bee # Directorio donde se instalará el programa CLI bee
+php_version: 8.2 # Versión de PHP que se instalará en el sistema

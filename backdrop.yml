@@ -1,0 +1,124 @@
+- hosts: mysql
+  become: false
+  vars_files: vars.yml
+
+  tasks:
+
+  - name: Crea la base de datos para Backdrop
+    community.mysql.mysql_db:
+      name: "{{ backdrop_db }}"
+      state: present
+      login_unix_socket: /run/mysqld/mysqld.sock
+      login_user: "{{ mysql_adm_user }}"
+      login_password: "{{ lookup('password', 'mysql_adm_passwd') }}"
+
+  - name: Crea el usuario para Backdrop
+    community.mysql.mysql_user:
+      name: "{{ backdrop_db_user }}"
+      password: "{{ lookup('password', 'mysql_usr_pass') }}"
+      priv: '{{ backdrop_db }}.*:ALL'
+      login_unix_socket: /run/mysqld/mysqld.sock
+      login_user: "{{ mysql_adm_user }}"
+      login_password: "{{ lookup('password', 'mysql_adm_passwd') }}"
+      host: "{{ backdrop_ip }}"
+      state: present
+
+- hosts: backdrop
+  become: true
+  vars_files: vars.yml
+
+  tasks:
+
+  - name: Paquetes básicos habituales con los que trabajo mis contenedores
+    apt:
+      update_cache: true
+      pkg:
+      - bash-completion
+      - emacs-nox
+      - emacs-goodies-el
+      - etckeeper
+      - git
+      - less
+      - screen
+      - unattended-upgrades
+      - wget
+
+  - name: Instala los paquetes necesarios para la aplicación
+    apt:
+      update_cache: true
+      pkg:
+      - certbot
+      - nginx
+      - php
+      - php-cli
+      - php-curl
+      - php-fpm
+      - php-gd
+      - php-intl
+      - php-json
+      - php-mbstring
+      - php-mysql
+      - php-xml
+      - php-zip
+      - python3-certbot-nginx
+      - unzip
+      - wget
+
+  - name: Configuración de nginx para PHP
+    template: >
+      src=templates/nginx_sites-available_default.j2
+      dest=/etc/nginx/sites-available/default
+
+  - name: Configuración básica de PHP
+    shell: |
+      perl -p -i -e 's/^upload_max_filesize.+/upload_max_filesize = 200M/; s/^post_max_size.+/post_max_size = 200M/; s/^memory_limit.+/memory_limit = 256M/; s/^.max_input_vars.+/max_input_vars = 2000' /etc/php/*/*/php.ini
+      systemctl restart php{{ php_version | quote }}-fpm.service
+      systemctl restart nginx.service
+
+  - name: Verifica que PHP esté activado desde nginx
+    shell: |
+      mkdir -p {{ backdrop_install_dir }}
+      echo '<?php phpinfo() ?>' > {{ backdrop_install_dir }}/test.php
+      PAGESIZE=$( wget -q -O - http://127.0.0.1/test.php | wc -c )
+      if [ $PAGESIZE -le 50000 ]; then echo "$PAGESIZE < 50000"; exit 1; fi
+      rm -f {{ backdrop_install_dir }}/test.php
+
+  - name: Obtiene el archivo fuente de Backdrop
+    shell: |
+      mkdir -p {{ backdrop_src_dir }}
+      cd {{ backdrop_src_dir }}
+      wget -q https://api.github.com/repos/backdrop/backdrop/releases/latest -O -|perl -n -e 'next unless /^\s*"?browser_download_url"?: "(.+)"$/;$uri=$1; @parts=split("/",$uri); $ver=$parts[-2]; print "$ver\n"; system "wget -q $uri -O backdrop_$ver.zip"'
+    register: backdrop_ver
+
+  - name: Instala Backdrop en el webroot
+    shell: |
+      cd {{ backdrop_install_dir }}
+      unzip -qq {{ backdrop_src_dir }}/backdrop_{{ backdrop_ver.stdout }}.zip
+      mv backdrop/* .
+      rm -r backdrop
+      chown www-data:www-data files
+    args:
+      creates: "{{ backdrop_install_dir }}/index.php"
+
+  - name: Obtiene e instala la traducción al español
+    shell: |
+      mkdir -p {{ backdrop_install_dir }}/files/translations
+      VER=$(perl -e '"{{ backdrop_ver.stdout }}" =~ /^(\d+\.\d+)/;print $1')
+      wget -q https://localize.backdropcms.org/files/l10n_packager/all/backdropcms/backdropcms-$VER.es.po -O {{ backdrop_install_dir }}/files/translations/backdropcms-$VER.es.po
+
+  - name: Instala la consola "bee"
+    ansible.builtin.git:
+      repo: 'https://github.com/backdrop-contrib/bee'
+      dest: "{{ bee_directory }}"
+
+  - name: Coloca a la consola "bee" en el path
+    ansible.builtin.file:
+      src: "{{ bee_directory }}/bee.php"
+      dest: /usr/local/bin/bee
+      state: link
+
+  - name: Instala configuración local de Backdrop
+    template: >-
+      src=templates/backdrop_settings.local.php
+      dest=/var/www/backdrop/settings.local.php
+
