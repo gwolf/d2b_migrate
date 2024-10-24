@@ -1,12 +1,43 @@
-backdrop_db_host: # Servidor MySQL donde se instalará la BD MySQL
-backdrop_db: # Nombre de la BD destino de Backdrop
-backdrop_db_user: # Usuario de Backdrop en la base de datos MySQL
-mysql_adm_user: root # Usuario administrativo para crear la BD de Backdrop
+# Este archivo contiene todos los valores a editar para configurar el
+# funcionamiento del playbook de importación de Drupal 7 a Backdrop.
 
-backdrop_ip: # IP del servidor que hospedará el sistema Backdrop
-backdrop_hostname: # Nombre (DNS) del sistema Backdrop a instalar
+# Servidor MySQL donde se instalará la BD MySQL
+backdrop_db_host: 192.168.0.2
+# Nombre de la BD destino de Backdrop
+backdrop_db: backdrop_TU_SITIO
+# Usuario de Backdrop en la base de datos MySQL
+backdrop_db_user: USUARIO_DB
+# IP del servidor que hospedará el sistema Backdrop
+backdrop_ip: 192.168.0.1
+# Nombre (DNS) del sistema Backdrop a instalar
+backdrop_hostname: TU_SITIO.DEPENDENCIA.unam.mx
+# Directorio donde se instalará el sistema Backdrop
+backdrop_install_dir: /var/www/backdrop_TU_SITIO
+# Directorio de datos del sitio
+backdrop_data_dir: /var/www/sites_data/TU_SITIO
+# Directorio donde se descarga el archivo fuente de Backdrop
+backdrop_src_dir: /var/www/src
+# Nombre (para ser desplegado a los usuarios) de tu sitio
+backdrop_site_name: NOMBRE DE TU SITIO
+# Nombre de usuario a emplear para la administración
+backdrop_admin_user: admin
+# Correo electrónico del administrador
+backdrop_admin_mail: TU_CORREO
 
-backdrop_install_dir: /var/www/backdrop # Directorio donde se instalará el sistema Backdrop
-backdrop_src_dir: /var/www/src # Directorio donde se descarga el archivo fuente de Backdrop
-bee_directory: /opt/bee # Directorio donde se instalará el programa CLI bee
-php_version: 8.2 # Versión de PHP que se instalará en el sistema
+# Directorio donde se instalará el la consola de administración "bee"
+bee_directory: /opt/bee
+
+# Base de datos fuente Drupal 7
+d7_database: BASE_DE_DATOS_DRUPAL7
+# Directorio de archivos dentro del sitio Drupal 7
+d7_files_dir: /var/www/DIRECTORIO_INST_DRUPAL/files/
+# Nombre DNS del sitio en Drupal 7
+d7_hostname: TU_SITIO_DRUPAL7
+
+# Usuario administrativo para crear la BD de Backdrop (típicamente "root")
+# Ojo: La contraseña se configura en el archivo mysql_adm_passwd en este mismo
+# directorio.
+mysql_adm_user: root
+
+# Versión de PHP que se instalará en el sistema
+php_version: 8.2

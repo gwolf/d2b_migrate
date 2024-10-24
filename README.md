@@ -61,6 +61,12 @@ encontrarse.
       no tengan un valor asignado, y revisando que las que sí lo tienen te
       parezcan adecuadas. Tú eres el administrador de tu sitio destino, tú debes
       decidir en qué directorio estarán tus archivos 😉
+
+	  Probablemente veas algo de superposición: hay valores que se especifican
+      en `hosts` y vuelven a configurarse en `vars.yml`. Los dejé de este modo
+      por aparente sencillez (a fin de cuentas, soy relativamente novato con
+      Ansible), ¡pero acepto con gusto cualquier sugerencia para que quede más
+      limpio!
    3. Hay dos contraseñas que *no deben estar* en archivos que se distribuyan
       (como `vars.yml`). Genera un archivo `mysql_adm_passwd` con la contraseña
       de `root` para tu base de datos (o del usuario administrativo que hayas
@@ -72,6 +78,15 @@ encontrarse.
 
    *Ansible* te pedirá la contraseña que requiere el *usuario estándar* en el
    servidor `backdrop` para hacer un `sudo` a root.
+
+   Para depurar el progreso de la instalación, puedes indicarle `-v` a
+   `ansible-playbook`, aumentando el nivel de información que muestra. Este
+   switch se puede especificar múltiples veces; al depurar, yo sugiero usar por
+   lo menos `-vvv`, que muestra el detalle de cómo se está invocando cada uno de
+   los comandos.
+
+   Si quieres que Ansible te pregunte a cada paso (cada `task`) antes de
+   realizarlo, especifica `--step`.
 4. Migra la información de tu instalación *Drupal 7* al servidor nuevo
    *Backdrop* utilizando el *playbook* `d7_a_backdrop.yml`:
 
