@@ -1,28 +1,3 @@
-- hosts: mysql
-  become: false
-  vars_files: vars.yml
-
-  tasks:
-
-  - name: Crea la base de datos para Backdrop
-    community.mysql.mysql_db:
-      name: "{{ backdrop_db }}"
-      state: present
-      login_unix_socket: /run/mysqld/mysqld.sock
-      login_user: "{{ mysql_adm_user }}"
-      login_password: "{{ lookup('password', 'mysql_adm_passwd') }}"
-
-  - name: Crea el usuario para Backdrop
-    community.mysql.mysql_user:
-      name: "{{ backdrop_db_user }}"
-      password: "{{ lookup('password', 'mysql_usr_pass') }}"
-      priv: '{{ backdrop_db }}.*:ALL'
-      login_unix_socket: /run/mysqld/mysqld.sock
-      login_user: "{{ mysql_adm_user }}"
-      login_password: "{{ lookup('password', 'mysql_adm_passwd') }}"
-      host: "{{ backdrop_ip }}"
-      state: present
-
 - hosts: backdrop
   become: true
   vars_files: vars.yml

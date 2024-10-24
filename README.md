@@ -16,10 +16,6 @@ En este repositorio hay dos playbooks:
 - [d7_a_backdrop.yml](./d7_a_backdrop.yml) realiza la migración de datos de un
   sistema Drupal 7 al recién instalado.
 
-Hay algo de superposición entre ambos playbooks, dado que el primero debe ser
-útil no sólo para la migración, sino para la instalación de sitios nuevos. Como
-sea, me gustaría integrarlos en uno sólo que no repita acciones.
-
 ## Pendientes y bugs
 
 Realicé una (pero sólamente una) migración exitosa con estos
@@ -31,7 +27,30 @@ encontrarse.
 
 ## ¿Cómo usar estos *playbooks*?
 
-1. **Adecúalos a tu sitio**. 
+1. ¿Qué _playbook_ requieres ejecutar?
+
+   1. El primer playbook, `backdrop.yml`, inicia de la suposición de que tienes
+	  un servidor (físico, virtual, en contenedor) basado en Debian o alguna
+	  distribución derivada (como Ubuntu o Mint). En particular, yo lo probé
+	  únicamente con Debian 12, *Bookworm*.
+
+      Este *playbook* instala y configura los paquetes necesarios para tener un
+      servidor Web (*Nginx*), el lenguaje *PHP*, y los módulos necesarios para
+      la operación de *Backdrop*. Hace un par de modificaciones a la
+      configuración por omisión de PHP (como permitir la subida de archivos más
+      grandes que los 8MB preconfigurados). Además, descarga tanto al sistema
+      *Backdrop* como a su consola de administración *Bee*, y los deja listos
+      para su configuración.
+
+	  **Normalmente sólo requierirás ejecutar este *playbook* una vez, y tendrás
+      un servidor listo para recibir a cada uno de los sitios.**
+
+  2. El segundo, `d7_a_backdrop`, es donde verdaderamente *“opera la
+     magia”*. Primero, genera la base de datos (y el usuario correspondiente)
+     que le indicaste. En segundo lugar, copia los archivos estáticos del
+     servidor anterior (*Drupal 7*) al nuevo. 
+
+2. **Adecúalos a tu sitio**. 
    1. Edita el archivo [hosts](./hosts), especificando la IP correcta para los
       siguientes servidores:
 	  - `backdrop`: El servidor destino donde instalarás el nuevo sitio
@@ -47,17 +66,17 @@ encontrarse.
       de `root` para tu base de datos (o del usuario administrativo que hayas
       definido como `mysql_adm_user`), y uno `mysql_usr_pass` con la contraseña
       para el usuario de base de datos de *Backdrop*.
-2. Instala el sistema base *Backdrop*, ejecutando el *playbook* `backdrop.yml`:
+3. Instala el sistema base *Backdrop*, ejecutando el *playbook* `backdrop.yml`:
 
    `ansible-playbook --ask-become-pass -i hosts backdrop.yml`
 
    *Ansible* te pedirá la contraseña que requiere el *usuario estándar* en el
    servidor `backdrop` para hacer un `sudo` a root.
-3. Migra la información de tu instalación *Drupal 7* al servidor nuevo
+4. Migra la información de tu instalación *Drupal 7* al servidor nuevo
    *Backdrop* utilizando el *playbook* `d7_a_backdrop.yml`:
 
     `ansible-playbook --ask-become-pass -i hosts d7_a_backdrop.yml`
 
-4. ¿Algo no salió bien? Por favor coméntamelo [como un *issue* en este
+5. ¿Algo no salió bien? Por favor coméntamelo [como un *issue* en este
    proyecto](https://github.com/gwolf/d2b_migrate/issues), intentaré resolverlo
    y ayudarte 😃

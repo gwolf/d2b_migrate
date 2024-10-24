@@ -1,6 +1,6 @@
 - hosts: mysql
   become: false
-  vars_files: d7_migrate_vars.yml
+  vars_files: vars.yml
 
   tasks:
 
@@ -75,7 +75,7 @@
 
 - hosts: d7
   become: false
-  vars_files: d7_migrate_vars.yml
+  vars_files: vars.yml
 
   tasks:
     - name: Verifica si ya existe el tar.gz con los contenidos del directorio de archivos
@@ -98,7 +98,7 @@
 
 - hosts: backdrop
   become: true
-  vars_files: d7_migrate_vars.yml
+  vars_files: vars.yml
 
   tasks:
     - name: Crea el directorio de instalación de Backdrop
@@ -218,7 +218,7 @@
     - name: Inicializa el sistema Backdrop
       shell: |
         cd {{ backdrop_install_dir }}
-        php ./core/scripts/install.sh --url {{ backdrop_hostname }} --account-mail {{ backdrop_admin_mail }} --account-name {{ backdrop_admin_user }} --db-url="mysql://{{ backdrop_db_user }}:{{ mysql_usr_pass }}@{{ backdrop_db_host }}/{{ backdrop_db }}" --langcode=es --site-name '{{ backdrop_site_name }}'
+        php ./core/scripts/install.sh --url {{ backdrop_hostname }} --account-mail {{ backdrop_admin_mail }} --account-name {{ backdrop_admin_user }} --db-url="mysql://{{ backdrop_db_user }}:{{ lookup('password', 'mysql_usr_pass') }}@{{ backdrop_db_host }}/{{ backdrop_db }}" --langcode=es --site-name '{{ backdrop_site_name }}'
 
     - name: Instala y activa el módulo de migración
       shell: |
@@ -255,14 +255,14 @@
 ## declaraciones anteriores a las siguientes... ¡Encontrar cómo!
 - hosts: 127.0.0.1
   connection: local
-  vars_files: d7_migrate_vars.yml
+  vars_files: vars.yml
   tasks:
     - name: Importa los datos y configuración de Drupal 7 a Backdrop
       shell: ./files/run_d2b.pl --bksql "/tmp/d7_backup_{{ d7_database }}.sql" --login "{{ login_url.stdout }}"
 
 - hosts: backdrop
   become: true
-  vars_files: d7_migrate_vars.yml
+  vars_files: vars.yml
   tasks:
     - name: Actualiza las estructuras de la BD
       shell: |
