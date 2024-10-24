@@ -123,7 +123,8 @@
 
     - name: Vacía el directorio de configuración, en  caso de existir
       shell: |
-        rm -rf "{{ backdrop_data_dir }}/files/config_*/active/*"
+        rm -rf {{ backdrop_data_dir }}/files/config_*/active
+      ignore_errors: true
 
     - name: Crea el directorio de archivos privados del sitio
       ansible.builtin.file:
@@ -185,10 +186,20 @@
         VER={{ backdrop_ver.stdout }}
         wget -q https://localize.backdropcms.org/files/l10n_packager/all/backdropcms/backdropcms-$VER.es.po -O {{ backdrop_install_dir }}/files/translations/backdropcms-$VER.es.po
 
+    - name: Verifica si el respaldo del directorio de archivos ya está marcado como descomprimido
+      ansible.builtin.stat: path="{{ backdrop_install_dir }}/files/is_unarchived"
+      register: is_unarchived
+
     - name: Descomprime el respaldo del directorio de archivos
       ansible.builtin.unarchive:
         dest: "{{ backdrop_install_dir }}/files"
         src: "/tmp/d7-{{ d7_database }}-files.tar.gz"
+      when: not is_unarchived.stat.exists
+
+    - name: Marca el respaldo del directorio como ya descomprmido
+      ansible.builtin.file:
+        dest: "{{ backdrop_install_dir }}/files/is_unarchived"
+        state: touch
 
     - name: Configuración de nginx para el sitio Backdrop
       template: >
